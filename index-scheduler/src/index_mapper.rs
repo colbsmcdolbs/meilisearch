@@ -66,11 +66,20 @@ impl IndexMapper {
 
     /// Create or open an index in the specified path.
     /// The path *must* exists or an error will be thrown.
-    fn create_or_open_index(&self, path: &Path) -> Result<Index> {
+    fn create_or_open_milli_index(&self, path: &Path) -> Result<Index> {
         let mut options = EnvOpenOptions::new();
         options.map_size(self.index_size);
         options.max_readers(1024);
         Ok(Index::new(options, path)?)
+    }
+
+    /// Open an index in the specified path.
+    /// The index *must* exists or an error will be thrown.
+    fn open_milli_index(&self, path: &Path) -> Result<Index> {
+        let mut options = EnvOpenOptions::new();
+        options.map_size(self.index_size);
+        options.max_readers(1024);
+        Ok(Index::open(options, path)?)
     }
 
     /// Get or create the index.
@@ -86,7 +95,7 @@ impl IndexMapper {
 
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
-                let index = self.create_or_open_index(&index_path)?;
+                let index = self.create_or_open_milli_index(&index_path)?;
 
                 wtxn.commit()?;
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
@@ -171,12 +180,10 @@ impl IndexMapper {
                 // that someone already opened the index (eg if two search happens
                 // at the same time), thus before opening it we check a second time
                 // if it's not already there.
-                // Since there is a good chance it's not already there we can use
-                // the entry method.
                 match index_map.entry(uuid) {
                     Entry::Vacant(entry) => {
                         let index_path = self.base_path.join(uuid.to_string());
-                        let index = self.create_or_open_index(&index_path)?;
+                        let index = self.open_milli_index(&index_path)?;
                         entry.insert(Available(index.clone()));
                         index
                     }
